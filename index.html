@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D House on Panoramic Image</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <video id="clouds-video" loop muted autoplay>
+            <source src="clouds.mp4" type="video/mp4">
+        </video>
+        <div id="controls">
+            <button id="play-pause-btn" class="control-btn">▶ Play</button>
+        </div>
+    </div>
+
+    <!-- Babylon.js from CDN -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <!-- Optional: Babylon.js loaders for additional formats -->
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <!-- Babylon.js materials library (needed for ShadowOnlyMaterial) -->
+    <script src="https://cdn.babylonjs.com/materialsLibrary/babylon.shadowOnlyMaterial.min.js"></script>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

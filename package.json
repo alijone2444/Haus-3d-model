@@ -1,0 +1,20 @@
+{
+  "name": "3d-house-panorama-viewer",
+  "version": "1.0.0",
+  "description": "3D House Model Viewer on Panoramic Image with Cloud Animation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "threejs",
+    "3d",
+    "glb",
+    "panorama"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
+

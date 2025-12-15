@@ -1,0 +1,842 @@
+// Babylon.js Scene setup
+let scene, engine, camera, model = null;
+let animationGroups = [];
+let isPlaying = false;
+let shadowGenerator = null;
+let sunMesh = null;
+let sunLight = null;
+let originalYPosition = null; // Store original Y position
+let isAnimationForward = true; // Track animation direction
+let isAnimating = false; // Track if animation is currently playing
+let isCentered = false; // Track if model is centered
+let defaultModelPosition = null; // Store default model position
+let centerModelPosition = null; // Store center model position
+let defaultCameraSettings = null; // Store default camera settings
+let centerCameraSettings = null; // Store center camera settings
+
+// Background video removed - using CSS instead
+
+// Initialize the scene
+function init() {
+    // Get canvas element
+    const canvas = document.getElementById('canvas');
+    
+    // Create Babylon.js engine
+    engine = new BABYLON.Engine(canvas, true, {
+        preserveDrawingBuffer: true,
+        stencil: true
+    });
+    
+    // Create scene
+    scene = new BABYLON.Scene(engine);
+    
+    // Set scene properties - transparent background for CSS video
+    scene.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+    
+    // Create default ArcRotateCamera
+    camera = new BABYLON.ArcRotateCamera(
+        "camera",
+        Math.PI / -3,       // alpha - face toward -Z
+        Math.PI / 2,   // beta - horizontal level
+        10,
+        BABYLON.Vector3.Zero(),
+        scene
+    );
+    
+    
+    // Enable camera controls
+    camera.attachControl(canvas, true);
+    
+    // Add lighting for proper model illumination
+    setupLighting();
+    
+    // Setup Bloom Effect
+    // setupBloomEffect();
+    
+    // Load 3D model
+    loadModel();
+    
+    // Setup play/pause button
+    setupControls();
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        engine.resize();
+    });
+    
+    // Start render loop
+    engine.runRenderLoop(() => {
+        scene.render();
+    });
+}
+
+// Setup realistic lighting like Babylon.js model viewer (Image Based Lighting)
+function setupLighting() {
+    // Create environment texture for Image Based Lighting (IBL)
+    // This provides realistic reflections and lighting like model viewer
+    try {
+        // Load HDRI environment texture for realistic IBL
+        // Using Babylon.js default environment
+        const hdrTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
+            "https://assets.babylonjs.com/environments/environmentSpecular.env",
+            scene
+        );
+        scene.environmentTexture = hdrTexture;
+        scene.environmentIntensity = 1.0;
+        
+        console.log('HDRI environment texture loaded for IBL');
+    } catch (error) {
+        console.warn('Could not load HDRI environment, using procedural fallback:', error);
+        // Fallback: Create procedural environment
+        scene.environmentIntensity = 0.8;
+        // Create a simple gradient environment
+        const envTexture = BABYLON.CubeTexture.CreateFromPrefilteredData(
+            null,
+            scene
+        );
+        if (envTexture) {
+            scene.environmentTexture = envTexture;
+        }
+    }
+    
+    // Set up realistic lighting setup similar to model viewer
+    // Primary directional light (main sun/key light) - 3-point lighting setup
+    const mainLight = new BABYLON.DirectionalLight(
+        "mainLight",
+        new BABYLON.Vector3(-0.5, -1, -0.3), // Natural sun direction
+        scene
+    );
+    mainLight.intensity = 1.2; // Moderate intensity for realistic look
+    mainLight.diffuse = new BABYLON.Color3(1, 0.95, 0.9); // Warm sunlight
+    mainLight.specular = new BABYLON.Color3(1, 0.95, 0.9);
+    
+    // Fill light from opposite side (softer, cooler) - 3-point lighting
+    const fillLight = new BABYLON.DirectionalLight(
+        "fillLight",
+        new BABYLON.Vector3(0.3, -0.5, 0.2), // Softer fill direction
+        scene
+    );
+    fillLight.intensity = 0.3; // Much softer than main light
+    fillLight.diffuse = new BABYLON.Color3(0.7, 0.8, 1.0); // Cool fill light
+    fillLight.specular = new BABYLON.Color3(0.7, 0.8, 1.0);
+    
+    // Rim/back light for edge definition
+    const rimLight = new BABYLON.DirectionalLight(
+        "rimLight",
+        new BABYLON.Vector3(0.2, 0.3, 1), // Behind the model
+        scene
+    );
+    rimLight.intensity = 0.2; // Very subtle rim light
+    rimLight.diffuse = new BABYLON.Color3(0.8, 0.85, 1.0);
+    
+    // Ambient/hemispheric light for base illumination
+    const ambientLight = new BABYLON.HemisphericLight(
+        "ambientLight",
+        new BABYLON.Vector3(0, 1, 0),
+        scene
+    );
+    ambientLight.intensity = 0.5; // Subtle ambient
+    ambientLight.diffuse = new BABYLON.Color3(0.6, 0.7, 0.8); // Slightly cool ambient
+    ambientLight.groundColor = new BABYLON.Color3(0.3, 0.3, 0.35); // Ground reflection
+    
+    // Enable shadows on main light only (for performance)
+    mainLight.shadowEnabled = true;
+    shadowGenerator = new BABYLON.ShadowGenerator(2048, mainLight);
+    shadowGenerator.useBlurExponentialShadowMap = true;
+    shadowGenerator.blurKernel = 32;
+    shadowGenerator.setDarkness(0.15); // Lighter, softer shadows for realistic look
+    
+    console.log('Realistic IBL lighting setup complete (model viewer style)');
+}
+
+// Setup Bloom Effect for the model
+// function setupBloomEffect() {
+//     try {
+//         // Create Default Rendering Pipeline with HDR support for bloom
+//         const pipeline = new BABYLON.DefaultRenderingPipeline(
+//             "defaultPipeline",
+//             true, // Enable HDR
+//             scene,
+//             [camera]
+//         );
+        
+//         // Enable and configure Bloom Effect
+//         pipeline.bloomEnabled = true;
+//         pipeline.bloomWeight = 0.4; // Intensity of the bloom effect (0-1)
+//         pipeline.bloomThreshold = 0.8; // Brightness threshold for bloom (0-1)
+//         pipeline.bloomKernel = 64; // Size of the bloom kernel (higher = more spread)
+//         pipeline.bloomScale = 0.5; // Scale of the bloom effect
+        
+//         // Store pipeline reference for potential adjustments
+//         window.bloomPipeline = pipeline;
+        
+//         console.log('Bloom Effect setup complete');
+//     } catch (error) {
+//         console.warn('Bloom Effect not available:', error.message);
+//         // Fallback: Try using GlowLayer for model glow
+//         try {
+//             const glowLayer = new BABYLON.GlowLayer("glow", scene);
+//             glowLayer.intensity = 0.5;
+//             window.glowLayer = glowLayer;
+//             console.log('Using GlowLayer as fallback');
+//         } catch (glowError) {
+//             console.error('Could not setup bloom or glow effect:', glowError);
+//         }
+//     }
+// }
+
+// Background video removed - using CSS video background instead
+
+// Load 3D model with GLB/GLTF support
+function loadModel() {
+    // Use Append to properly load animations - ImportMesh might not load all animations
+    BABYLON.SceneLoader.Append(
+        "",
+        "model5.glb",
+        scene,
+        () => {
+            // Get all meshes from the scene
+            const meshes = scene.meshes.filter(m => m instanceof BABYLON.Mesh);
+            const skeletons = scene.skeletons;
+            const animationGroups = scene.animationGroups;
+            
+            // Process the loaded data
+            processLoadedModel(meshes, skeletons, animationGroups);
+        },
+        (progress) => {
+            if (progress.lengthComputable) {
+                const percent = (progress.loaded / progress.total) * 100;
+                console.log('Loading progress: ' + percent.toFixed(2) + '%');
+            }
+        },
+        (error) => {
+            console.error('Error loading model:', error);
+        }
+    );
+}
+
+// Process loaded model
+function processLoadedModel(meshes, skeletons, animationGroups) {
+    console.log('Model loaded successfully');
+    console.log(`Found ${meshes.length} mesh(es), ${skeletons ? skeletons.length : 0} skeleton(s), ${animationGroups ? animationGroups.length : 0} animation group(s)`);
+    
+    // Store animation groups - Ensure animations are stopped and only play on button click
+    if (animationGroups && animationGroups.length > 0) {
+        window.animationGroups = animationGroups;
+        animationGroups.forEach((animGroup) => {
+            animGroup.stop(); // Stop all animations
+            animGroup.speedRatio = 0; // Set speed to 0 (paused)
+        });
+        console.log(`Loaded ${animationGroups.length} animation group(s). Ready to play.`);
+    } else {
+        // Try to get animations from skeletons if animationGroups is empty
+        if (skeletons && skeletons.length > 0) {
+            console.log(`Found ${skeletons.length} skeleton(s), checking for animations...`);
+            skeletons.forEach((skeleton) => {
+                const animRanges = skeleton.getAnimationRanges();
+                if (animRanges.length > 0) {
+                    console.log(`Found ${animRanges.length} animation range(s) in skeleton "${skeleton.name}"`);
+                }
+            });
+        }
+        console.log('No animation groups found in model');
+    }
+    
+    // Find root mesh (mesh without parent)
+    let rootMesh = null;
+    meshes.forEach((mesh) => {
+        if (mesh instanceof BABYLON.Mesh) {
+            // Enable shadows
+            console.log('mesh',mesh)
+            mesh.receiveShadows = true;
+            if (shadowGenerator) {
+                shadowGenerator.addShadowCaster(mesh, true);
+            }
+            
+            // Enhance materials for realistic IBL lighting (model viewer style)
+            if (mesh.material) {
+                if (mesh.material instanceof BABYLON.StandardMaterial) {
+                    // Use environment texture for reflections (IBL)
+                    if (scene.environmentTexture) {
+                        mesh.material.reflectionTexture = scene.environmentTexture;
+                        mesh.material.reflectionFresnelParameters = new BABYLON.FresnelParameters();
+                        mesh.material.reflectionFresnelParameters.bias = 0.1;
+                    }
+                    // Enhance specular for realistic reflections
+                    if (mesh.material.specularColor) {
+                        mesh.material.specularColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+                    }
+                    // Subtle emissive for bloom
+                    if (!mesh.material.emissiveColor) {
+                        mesh.material.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+                    }
+                } else if (mesh.material instanceof BABYLON.PBRMaterial) {
+                    // PBR materials automatically use environment texture
+                    // Just enhance the settings for realistic look
+                    mesh.material.environmentIntensity = 1.0;
+                    mesh.material.metallicFactor = 0.1; // Slight metallic for reflections
+                    mesh.material.roughness = 0.3; // Moderate roughness
+                }
+            }
+            
+            // Process child meshes
+            mesh.getChildMeshes().forEach((child) => {
+                if (child instanceof BABYLON.Mesh) {
+                    child.receiveShadows = true;
+                    if (shadowGenerator) {
+                        shadowGenerator.addShadowCaster(child, true);
+                    }
+                    
+                    // Enhance child materials for realistic IBL
+                    if (child.material) {
+                        if (child.material instanceof BABYLON.StandardMaterial) {
+                            if (scene.environmentTexture) {
+                                child.material.reflectionTexture = scene.environmentTexture;
+                                child.material.reflectionFresnelParameters = new BABYLON.FresnelParameters();
+                                child.material.reflectionFresnelParameters.bias = 0.1;
+                            }
+                            if (child.material.specularColor) {
+                                child.material.specularColor = new BABYLON.Color3(0.8, 0.8, 0.8);
+                            }
+                            if (!child.material.emissiveColor) {
+                                child.material.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.05);
+                            }
+                        } else if (child.material instanceof BABYLON.PBRMaterial) {
+                            child.material.environmentIntensity = 1.0;
+                            child.material.metallicFactor = 0.1;
+                            child.material.roughness = 0.3;
+                        }
+                    }
+                }
+            });
+            
+            console.log('Mesh loaded:', mesh.name);
+            
+            // Find root mesh (no parent or parent is not a mesh)
+            if (!rootMesh && (!mesh.parent || !(mesh.parent instanceof BABYLON.Mesh))) {
+                rootMesh = mesh;
+            }
+        }
+    });
+    
+    // If no root found, use first mesh
+    if (!rootMesh && meshes.length > 0) {
+        rootMesh = meshes[0];
+    }
+    
+    // Calculate bounding box for the entire model and position on ground
+    console.log('rootMesh###########################',rootMesh)
+    if (rootMesh) {
+            console.log('inside###########################')
+        // Create a temporary bounding box from all meshes
+        let min = new BABYLON.Vector3(Infinity, Infinity, Infinity);
+        let max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
+        console.log('inside###########################2')
+        
+        meshes.forEach((mesh) => {
+            if (mesh instanceof BABYLON.Mesh) {
+                const boundingInfo = mesh.getBoundingInfo();
+                const meshMin = boundingInfo.boundingBox.minimumWorld;
+                const meshMax = boundingInfo.boundingBox.maximumWorld;
+                console.log('inside###########################3')
+                
+                min = BABYLON.Vector3.Minimize(min, meshMin);
+                max = BABYLON.Vector3.Maximize(max, meshMax);
+            }
+        });
+        
+        console.log('inside###########################4')
+        const center = BABYLON.Vector3.Center(min, max);
+        console.log('inside###########################5', center);
+        
+        // Calculate size (not needed for positioning, but useful for debugging)
+        const size = max.subtract(min);
+        console.log('inside###########################6', size);
+        
+        // Increase scale of the house
+        const scaleFactor = 1.7; // Increased scale for larger house
+        rootMesh.scaling = new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor);
+        console.log('Model scaled by:', scaleFactor);
+        
+        // Position the model below ground surface (DEFAULT POSITION)
+        // Moved back on X and Z axes (less negative = further back)
+        rootMesh.position.y = -center.y - 2.2; // Move down by 1.0 units
+        rootMesh.position.x = -center.x - 2.9; // Moved back on X axis (was -2.5)
+        rootMesh.position.z = -center.z - 1.9; // Moved back on Z axis (was -1.5)
+       
+        console.log('Model positioned at Y:', rootMesh.position.y,rootMesh.position.x);
+        
+        // Store default position
+        defaultModelPosition = rootMesh.position.clone();
+        
+        // Store center position (for centering)
+        centerModelPosition = new BABYLON.Vector3(
+            -center.x - 0.1,  // X position for center
+            -center.y - 1.5,  // Y position for center
+            -center.z         // Z position for center (no offset)
+        );
+        
+        // Store original Y position for reverse animation
+        originalYPosition = rootMesh.position.y;
+        console.log('originalYPosition', originalYPosition);
+        
+        // Store camera settings
+        defaultCameraSettings = {
+            alpha: Math.PI / -3,
+            beta: Math.PI / 2,
+            radius: 10,
+            target: BABYLON.Vector3.Zero()
+        };
+        
+        centerCameraSettings = {
+            alpha: 0,
+            beta: Math.PI / 2,
+            radius: 10,
+            target: BABYLON.Vector3.Zero()
+        };
+        
+        // No custom rotation - use default rotation from Blender
+        model = rootMesh;
+    }
+}
+
+// Function to move model to center, then move up and start animation (forward)
+function moveModelUpAndAnimate() {
+    if (!model || !centerModelPosition) return;
+    
+    // First, move model to center position if not already centered
+    if (!isCentered) {
+        // Move to center position
+        const centerDuration = 1500;
+        const centerFps = 30;
+        const centerEndFrame = centerDuration / 1000 * centerFps;
+        
+        const centerPositionAnimation = new BABYLON.Animation(
+            "centerPositionAnimation",
+            "position",
+            30,
+            BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+        );
+        
+        const centerKeys = [
+            { frame: 0, value: model.position.clone() },
+            { frame: centerEndFrame, value: centerModelPosition.clone() }
+        ];
+        
+        centerPositionAnimation.setKeys(centerKeys);
+        
+        const centerEasing = new BABYLON.CubicEase();
+        centerEasing.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+        centerPositionAnimation.setEasingFunction(centerEasing);
+        
+        model.animations = [];
+        model.animations.push(centerPositionAnimation);
+        
+        // Animate camera to center
+        animateCameraToSettings(centerCameraSettings, centerDuration);
+        
+        // After moving to center, then move up and animate
+        scene.beginAnimation(model, 0, centerEndFrame, false, 1.0, () => {
+            // Now move up and start animation
+            moveUpAndAnimateAfterCenter();
+        });
+        
+        isCentered = true;
+    } else {
+        // Already centered, just move up and animate
+        moveUpAndAnimateAfterCenter();
+    }
+}
+
+// Helper function to move up and animate after centering
+function moveUpAndAnimateAfterCenter() {
+    if (!model) return;
+    
+    const startY = model.position.y;
+    const targetY = -1.5; // Reduced height to 2
+    const duration = 2000; // 2 seconds for smooth movement
+    const fps = 30;
+    const endFrame = duration / 1000 * fps;
+    
+    // Create animation for position.y
+    const positionAnimation = new BABYLON.Animation(
+        "moveUpAnimation",
+        "position.y",
+        fps,
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    
+    // Create keyframes
+    const keys = [
+        { frame: 0, value: startY },
+        { frame: endFrame, value: targetY }
+    ];
+    
+    positionAnimation.setKeys(keys);
+    
+    // Add easing for smooth movement
+    const easingFunction = new BABYLON.CubicEase();
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    positionAnimation.setEasingFunction(easingFunction);
+    
+    // Add animation to model
+    model.animations = [];
+    model.animations.push(positionAnimation);
+    
+    // Start the position animation
+    scene.beginAnimation(model, 0, endFrame, false, 1.0);
+    
+    // Zoom out camera to radius 15 when animation starts
+    if (camera) {
+        const cameraZoomDuration = duration; // Same duration as model movement
+        const cameraZoomFps = 30;
+        const cameraZoomEndFrame = cameraZoomDuration / 1000 * cameraZoomFps;
+        
+        const cameraRadiusAnimation = new BABYLON.Animation(
+            "cameraZoomOutAnimation",
+            "radius",
+            cameraZoomFps,
+            BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+        );
+        
+        const cameraZoomKeys = [
+            { frame: 0, value: camera.radius },
+            { frame: cameraZoomEndFrame, value: 15 } // Zoom out to radius 15
+        ];
+        
+        cameraRadiusAnimation.setKeys(cameraZoomKeys);
+        
+        const cameraZoomEasing = new BABYLON.CubicEase();
+        cameraZoomEasing.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+        cameraRadiusAnimation.setEasingFunction(cameraZoomEasing);
+        
+        camera.animations = [];
+        camera.animations.push(cameraRadiusAnimation);
+        scene.beginAnimation(camera, 0, cameraZoomEndFrame, false, 1.0);
+    }
+    
+    // Start animation groups forward
+    if (window.animationGroups && window.animationGroups.length > 0) {
+        window.animationGroups.forEach((animGroup) => {
+            // Reset to beginning of animation
+            animGroup.goToFrame(0);
+            animGroup.speedRatio = 1.0; // Play at normal speed
+            animGroup.play(false); // Don't loop - play once
+            
+            // Listen for animation end
+            animGroup.onAnimationEndObservable.addOnce(() => {
+                isAnimating = false;
+                const playPauseBtn = document.getElementById('play-pause-btn');
+                if (playPauseBtn) {
+                    playPauseBtn.disabled = false;
+                    playPauseBtn.textContent = '▶ Play';
+                }
+            });
+        });
+    }
+}
+
+// Function to move model down, play animation in reverse, then move back to default
+function moveModelDownAndAnimateReverse() {
+    if (!model || originalYPosition === null) return;
+    
+    const startY = model.position.y;
+    const targetY = originalYPosition;
+    const duration = 2000; // 2 seconds for smooth movement
+    const fps = 30;
+    const endFrame = duration / 1000 * fps;
+    
+    // Create animation for position.y
+    const positionAnimation = new BABYLON.Animation(
+        "moveDownAnimation",
+        "position.y",
+        fps,
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    
+    // Create keyframes
+    const keys = [
+        { frame: 0, value: startY },
+        { frame: endFrame, value: targetY }
+    ];
+    
+    positionAnimation.setKeys(keys);
+    
+    // Add easing for smooth movement
+    const easingFunction = new BABYLON.CubicEase();
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    positionAnimation.setEasingFunction(easingFunction);
+    
+    // Add animation to model
+    model.animations = [];
+    model.animations.push(positionAnimation);
+    
+    // Start the position animation
+    scene.beginAnimation(model, 0, endFrame, false, 1.0);
+    
+    // Zoom camera back in to radius 10 when reverse animation starts
+    if (camera) {
+        const cameraZoomDuration = duration; // Same duration as model movement
+        const cameraZoomFps = 30;
+        const cameraZoomEndFrame = cameraZoomDuration / 1000 * cameraZoomFps;
+        
+        const cameraRadiusAnimation = new BABYLON.Animation(
+            "cameraZoomInAnimation",
+            "radius",
+            cameraZoomFps,
+            BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+        );
+        
+        const cameraZoomKeys = [
+            { frame: 0, value: camera.radius },
+            { frame: cameraZoomEndFrame, value: 10 } // Zoom back in to radius 10
+        ];
+        
+        cameraRadiusAnimation.setKeys(cameraZoomKeys);
+        
+        const cameraZoomEasing = new BABYLON.CubicEase();
+        cameraZoomEasing.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+        cameraRadiusAnimation.setEasingFunction(cameraZoomEasing);
+        
+        camera.animations = [];
+        camera.animations.push(cameraRadiusAnimation);
+        scene.beginAnimation(camera, 0, cameraZoomEndFrame, false, 1.0);
+    }
+    
+    // Start animation groups in reverse
+    if (window.animationGroups && window.animationGroups.length > 0) {
+        window.animationGroups.forEach((animGroup) => {
+            // Reset to end of animation before playing in reverse
+            animGroup.goToFrame(animGroup.to - animGroup.from);
+            animGroup.speedRatio = -1.0; // Play in reverse
+            animGroup.play(false); // Don't loop - play once
+            
+            // Listen for animation end
+            animGroup.onAnimationEndObservable.addOnce(() => {
+                // After animation completes, move back to default position
+                if (isCentered && defaultModelPosition) {
+                    moveModelToDefault();
+                    const centerBtn = document.getElementById('center-btn');
+                    if (centerBtn) {
+                        centerBtn.textContent = 'Center';
+                    }
+                }
+                
+                isAnimating = false;
+                const playPauseBtn = document.getElementById('play-pause-btn');
+                if (playPauseBtn) {
+                    playPauseBtn.disabled = false;
+                    playPauseBtn.textContent = '▶ Play';
+                }
+            });
+        });
+    }
+}
+
+// Function to move model to center position
+function moveModelToCenter() {
+    if (!model || !centerModelPosition) return;
+    
+    const duration = 1500; // 1.5 seconds
+    const fps = 30;
+    const endFrame = duration / 1000 * fps;
+    
+    // Animate position
+    const positionAnimation = new BABYLON.Animation(
+        "centerPositionAnimation",
+        "position",
+        30,
+        BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    
+    const keys = [
+        { frame: 0, value: model.position.clone() },
+        { frame: endFrame, value: centerModelPosition.clone() }
+    ];
+    
+    positionAnimation.setKeys(keys);
+    
+    const easingFunction = new BABYLON.CubicEase();
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    positionAnimation.setEasingFunction(easingFunction);
+    
+    model.animations = [];
+    model.animations.push(positionAnimation);
+    scene.beginAnimation(model, 0, endFrame, false, 1.0);
+    
+    // Animate camera to center settings
+    animateCameraToSettings(centerCameraSettings, duration);
+    
+    isCentered = true;
+}
+
+// Function to move model back to default position
+function moveModelToDefault() {
+    if (!model || !defaultModelPosition) return;
+    
+    const duration = 1500; // 1.5 seconds
+    const fps = 30;
+    const endFrame = duration / 1000 * fps;
+    
+    // Animate position
+    const positionAnimation = new BABYLON.Animation(
+        "defaultPositionAnimation",
+        "position",
+        30,
+        BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    
+    const keys = [
+        { frame: 0, value: model.position.clone() },
+        { frame: endFrame, value: defaultModelPosition.clone() }
+    ];
+    
+    positionAnimation.setKeys(keys);
+    
+    const easingFunction = new BABYLON.CubicEase();
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    positionAnimation.setEasingFunction(easingFunction);
+    
+    model.animations = [];
+    model.animations.push(positionAnimation);
+    scene.beginAnimation(model, 0, endFrame, false, 1.0);
+    
+    // Animate camera to default settings
+    animateCameraToSettings(defaultCameraSettings, duration);
+    
+    isCentered = false;
+}
+
+// Function to animate camera to specific settings
+function animateCameraToSettings(settings, duration) {
+    if (!camera) return;
+    
+    const fps = 30;
+    const endFrame = duration / 1000 * fps;
+    
+    // Animate alpha
+    const alphaAnimation = new BABYLON.Animation(
+        "cameraAlphaAnimation",
+        "alpha",
+        fps,
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    alphaAnimation.setKeys([
+        { frame: 0, value: camera.alpha },
+        { frame: endFrame, value: settings.alpha }
+    ]);
+    
+    // Animate beta
+    const betaAnimation = new BABYLON.Animation(
+        "cameraBetaAnimation",
+        "beta",
+        fps,
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    betaAnimation.setKeys([
+        { frame: 0, value: camera.beta },
+        { frame: endFrame, value: settings.beta }
+    ]);
+    
+    // Animate radius
+    const radiusAnimation = new BABYLON.Animation(
+        "cameraRadiusAnimation",
+        "radius",
+        fps,
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+    radiusAnimation.setKeys([
+        { frame: 0, value: camera.radius },
+        { frame: endFrame, value: settings.radius }
+    ]);
+    
+    const easingFunction = new BABYLON.CubicEase();
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    alphaAnimation.setEasingFunction(easingFunction);
+    betaAnimation.setEasingFunction(easingFunction);
+    radiusAnimation.setEasingFunction(easingFunction);
+    
+    camera.animations = [];
+    camera.animations.push(alphaAnimation, betaAnimation, radiusAnimation);
+    scene.beginAnimation(camera, 0, endFrame, false, 1.0);
+}
+
+// Setup play/pause controls
+function setupControls() {
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const centerBtn = document.getElementById('center-btn');
+    
+    // Set initial button states
+    playPauseBtn.textContent = '▶ Play';
+    playPauseBtn.disabled = false;
+    centerBtn.textContent = 'Center';
+    centerBtn.disabled = false;
+    
+    // Center button handler
+    centerBtn.addEventListener('click', () => {
+        if (isCentered) {
+            // Move back to default
+            moveModelToDefault();
+            centerBtn.textContent = 'Center';
+        } else {
+            // Move to center
+            moveModelToCenter();
+            centerBtn.textContent = 'Move Back';
+        }
+    });
+    
+    playPauseBtn.addEventListener('click', () => {
+        // Don't do anything if animation is currently playing
+        if (isAnimating) {
+            return;
+        }
+        
+        if (window.animationGroups && window.animationGroups.length > 0) {
+            // Disable button during animation
+            playPauseBtn.disabled = true;
+            isAnimating = true;
+            
+            if (isAnimationForward) {
+                // Play forward animation
+                moveModelUpAndAnimate();
+                isAnimationForward = false; // Next time will be reverse
+            } else {
+                // Play reverse animation
+                moveModelDownAndAnimateReverse();
+                isAnimationForward = true; // Next time will be forward
+            }
+        } else {
+            // If no animations yet, just toggle button state
+            console.log('No animations available yet');
+        }
+    });
+}
+
+// Initialize background video (CSS video)
+function initBackgroundVideo() {
+    const bgVideo = document.getElementById('background-video');
+    if (bgVideo) {
+        bgVideo.play().catch(err => {
+            console.log('Video autoplay prevented, will play on user interaction');
+            document.addEventListener('click', () => {
+                bgVideo.play();
+            }, { once: true });
+        });
+    }
+}
+
+// Initialize when page loads
+window.addEventListener('load', () => {
+    init();
+    initBackgroundVideo();
+});
