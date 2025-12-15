@@ -1,4 +1,4 @@
-// Babylon.js Scene setup
+
 let scene, engine, camera, model = null;
 let animationGroups = [];
 let isPlaying = false;
@@ -68,6 +68,7 @@ function init() {
     });
 }
 
+// Create a fullscreen video plane that follows the camera (Babylon-based background video)
 // Create a fullscreen video plane that follows the camera (Babylon-based background video)
 function createVideoBackground() {
     // Create the video texture
@@ -153,10 +154,15 @@ function createVideoBackground() {
     shadowPlane.isPickable = false;
     shadowPlane.doNotSerialize = true;
 
+    // Fixed Y position for the shadow plane
+    const fixedYPosition = 0; // Set this to whatever Y position you want shadows to appear at
+
     // Keep both planes fixed relative to camera
     scene.onBeforeRenderObservable.add(() => {
         if (videoPlane && shadowPlane && camera) {
             const cameraDirection = camera.getForwardRay().direction;
+
+            // For video plane: follow camera normally
             const basePos = camera.position.add(cameraDirection.scale(distance));
 
             // Background video plane position
@@ -164,16 +170,35 @@ function createVideoBackground() {
             videoPlane.lookAt(videoPlane.position.add(cameraDirection));
             videoPlane.scaling = new BABYLON.Vector3(1, 1, 1);
 
+            // For shadow plane: keep Y position fixed, only follow X and Z
+            // Create a modified camera direction with Y fixed
+            const fixedCameraDirection = new BABYLON.Vector3(
+                cameraDirection.x,
+                0, // Keep Y at 0 to prevent vertical movement
+                cameraDirection.z
+            ).normalize();
+
+            const shadowBasePos = camera.position.add(fixedCameraDirection.scale(distance));
+            // Apply fixed Y position
+            shadowBasePos.y = fixedYPosition;
+
             // Shadow plane slightly closer to camera so its shadow is visible over the video
-            shadowPlane.position = basePos.add(cameraDirection.scale(-0.01));
-            shadowPlane.lookAt(shadowPlane.position.add(cameraDirection));
+            shadowPlane.position = shadowBasePos.add(fixedCameraDirection.scale(-0.01));
+
+            // Make shadow plane look in the same direction (but with fixed Y)
+            const shadowLookDirection = new BABYLON.Vector3(
+                cameraDirection.x,
+                0, // Keep looking horizontally
+                cameraDirection.z
+            ).normalize();
+            shadowPlane.lookAt(shadowPlane.position.add(shadowLookDirection));
+
             shadowPlane.scaling = new BABYLON.Vector3(1, 1, 1);
         }
     });
 
-    console.log('Babylon video background plane created');
+    console.log('Babylon video background plane created with fixed Y shadow plane');
 }
-
 // Setup realistic lighting like Babylon.js model viewer (Image Based Lighting)
 function setupLighting() {
     // Create environment texture for Image Based Lighting (IBL)
@@ -569,13 +594,10 @@ function moveModelUpAndAnimate() {
     }
 }
 // Function to move model down and play animation in reverse
-// Function to move model down and play animation in reverse
 function moveModelDownAndAnimateReverse() {
-    if (model && originalYPosition !== null && originalScaleFactor !== null) {
+    if (model && originalYPosition !== null) {
         const startY = model.position.y;
         const targetY = originalYPosition;
-        const currentScale = model.scaling.x;
-        const targetScale = originalScaleFactor; // Restore original scale
         const duration = 2000; // 2 seconds for smooth movement
         const fps = 30;
         const endFrame = duration / 1000 * fps;
@@ -589,42 +611,24 @@ function moveModelDownAndAnimateReverse() {
             BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
         );
 
-        // Create animation for scaling
-        const scaleAnimation = new BABYLON.Animation(
-            "scaleDownAnimation",
-            "scaling",
-            fps,
-            BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
-            BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
-        );
-
-        // Create keyframes for position
-        const positionKeys = [
+        // Create keyframes
+        const keys = [
             { frame: 0, value: startY },
             { frame: endFrame, value: targetY }
         ];
 
-        // Create keyframes for scaling
-        const scaleKeys = [
-            { frame: 0, value: new BABYLON.Vector3(currentScale, currentScale, currentScale) },
-            { frame: endFrame, value: new BABYLON.Vector3(targetScale, targetScale, targetScale) }
-        ];
-
-        positionAnimation.setKeys(positionKeys);
-        scaleAnimation.setKeys(scaleKeys);
+        positionAnimation.setKeys(keys);
 
         // Add easing for smooth movement
         const easingFunction = new BABYLON.CubicEase();
         easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
         positionAnimation.setEasingFunction(easingFunction);
-        scaleAnimation.setEasingFunction(easingFunction);
 
-        // Add both animations to model
+        // Add animation to model
         model.animations = [];
         model.animations.push(positionAnimation);
-        model.animations.push(scaleAnimation);
 
-        // Start both animations
+        // Start the position animation
         scene.beginAnimation(model, 0, endFrame, false, 1.0);
     }
 
@@ -691,4 +695,3 @@ function setupControls() {
 window.addEventListener('load', () => {
     init();
 });
-
