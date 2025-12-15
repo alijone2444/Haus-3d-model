@@ -598,11 +598,11 @@ function moveModelDownAndAnimateReverse() {
     if (model && originalYPosition !== null) {
         const startY = model.position.y;
         const targetY = originalYPosition;
-        const duration = 2000; // 2 seconds for smooth movement
+        const duration = 2000; // 2 seconds
         const fps = 30;
         const endFrame = duration / 1000 * fps;
 
-        // Create animation for position.y
+        // ----- Position Animation -----
         const positionAnimation = new BABYLON.Animation(
             "moveDownAnimation",
             "position.y",
@@ -611,36 +611,54 @@ function moveModelDownAndAnimateReverse() {
             BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
         );
 
-        // Create keyframes
-        const keys = [
+        const positionKeys = [
             { frame: 0, value: startY },
             { frame: endFrame, value: targetY }
         ];
+        positionAnimation.setKeys(positionKeys);
 
-        positionAnimation.setKeys(keys);
+        // ----- Scale Animation -----
+        if (originalScaleFactor !== null) {
+            const startScale = model.scaling.x; // assuming uniform scaling
+            const scaleAnimation = new BABYLON.Animation(
+                "scaleDownAnimation",
+                "scaling",
+                fps,
+                BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
+                BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+            );
 
-        // Add easing for smooth movement
-        const easingFunction = new BABYLON.CubicEase();
-        easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
-        positionAnimation.setEasingFunction(easingFunction);
+            const scaleKeys = [
+                { frame: 0, value: new BABYLON.Vector3(startScale, startScale, startScale) },
+                { frame: endFrame, value: new BABYLON.Vector3(originalScaleFactor, originalScaleFactor, originalScaleFactor) }
+            ];
 
-        // Add animation to model
-        model.animations = [];
-        model.animations.push(positionAnimation);
+            scaleAnimation.setKeys(scaleKeys);
 
-        // Start the position animation
+            // Add easing
+            const easingFunction = new BABYLON.CubicEase();
+            easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+            positionAnimation.setEasingFunction(easingFunction);
+            scaleAnimation.setEasingFunction(easingFunction);
+
+            // Add both animations to model
+            model.animations = [positionAnimation, scaleAnimation];
+        } else {
+            // Only position animation
+            model.animations = [positionAnimation];
+        }
+
+        // Start animation
         scene.beginAnimation(model, 0, endFrame, false, 1.0);
     }
 
-    // Start animation groups in reverse
+    // Reverse animation groups (skeleton/GLB animations)
     if (window.animationGroups && window.animationGroups.length > 0) {
         window.animationGroups.forEach((animGroup) => {
-            // Reset to end of animation before playing in reverse
             animGroup.goToFrame(animGroup.to - animGroup.from);
-            animGroup.speedRatio = -1.0; // Play in reverse
-            animGroup.play(false); // Don't loop - play once
+            animGroup.speedRatio = -1.0;
+            animGroup.play(false);
 
-            // Listen for animation end
             animGroup.onAnimationEndObservable.addOnce(() => {
                 isAnimating = false;
                 const playPauseBtn = document.getElementById('play-pause-btn');
@@ -652,6 +670,7 @@ function moveModelDownAndAnimateReverse() {
         });
     }
 }
+
 
 // Setup play/pause controls
 function setupControls() {
