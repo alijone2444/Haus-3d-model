@@ -1,4 +1,5 @@
 
+
 let scene, engine, camera, model = null;
 let animationGroups = [];
 let isPlaying = false;
@@ -9,6 +10,9 @@ let originalYPosition = null; // Store original Y position
 let isAnimationForward = true; // Track animation direction
 let isAnimating = false; // Track if animation is currently playing
 let originalScaleFactor = null
+let mainLight = null; // Store main light reference for camera-following
+let originalLightDirection = new BABYLON.Vector3(1.4, -1.0, 1.40); // Store original light direction
+let hasAutoPlayed = false; // Track if first auto-animation has run
 
 // Background video now rendered inside Babylon scene instead of HTML
 
@@ -42,11 +46,11 @@ function init() {
     // Enable camera controls
     camera.attachControl(canvas, true);
 
+    // Add lighting for proper model illumination (must be before createVideoBackground)
+    setupLighting();
+
     // Create Babylon video background plane that always stays behind the model
     createVideoBackground();
-
-    // Add lighting for proper model illumination
-    setupLighting();
 
     // Setup Bloom Effect
     setupBloomEffect();
@@ -56,6 +60,9 @@ function init() {
 
     // Setup play/pause button
     setupControls();
+    
+    // Setup light direction sliders (commented out for now)
+    // setupLightControls();
 
     // Handle window resize
     window.addEventListener('resize', () => {
@@ -92,8 +99,16 @@ function createVideoBackground() {
     // Get camera field of view in radians
     const fovRad = camera.fov;
 
-    // Distance from camera - large enough to cover entire view
-    const distance = 50;
+    // Distance from camera - closer to model but still behind it
+    // Reduced from 50 to 15 to bring video closer without model going inside
+    const distance = 15;
+    
+    // Store distance globally to set camera zoom limit
+    window.videoPlaneDistance = distance;
+    
+    // Set camera zoom out limit to prevent zooming beyond video plane distance
+    // upperRadiusLimit prevents zooming out (increasing radius) beyond this point
+    camera.upperRadiusLimit = distance;
 
     // Calculate plane dimensions to exactly fill camera view
     const height = 2 * Math.tan(fovRad / 2) * distance; // based on FOV
@@ -153,6 +168,21 @@ function createVideoBackground() {
     shadowPlane.receiveShadows = true;
     shadowPlane.isPickable = false;
     shadowPlane.doNotSerialize = true;
+    
+    // Use rendering groups to control render order:
+    // 0 = video plane (background)
+    // 1 = shadow plane (shadows on ground)
+    // 2 = model (foreground, renders on top of shadows)
+    videoPlane.renderingGroupId = 0;
+    shadowPlane.renderingGroupId = 1;
+    
+    // Enable depth testing on shadow material to respect z-ordering
+    shadowMat.disableDepthWrite = false;
+    shadowPlane.enableDepthSort = true;
+    
+    // Note: In Babylon.js, setting receiveShadows = true is sufficient
+    // The shadow generator automatically handles meshes with receiveShadows enabled
+    // No need to explicitly add shadow receivers
 
     // Fixed Y position for the shadow plane
     const fixedYPosition = 0; // Set this to whatever Y position you want shadows to appear at
@@ -170,7 +200,7 @@ function createVideoBackground() {
             videoPlane.lookAt(videoPlane.position.add(cameraDirection));
             videoPlane.scaling = new BABYLON.Vector3(1, 1, 1);
 
-            // For shadow plane: keep Y position fixed, only follow X and Z
+            // For shadow plane: position at same location as video plane but with fixed Y
             // Create a modified camera direction with Y fixed
             const fixedCameraDirection = new BABYLON.Vector3(
                 cameraDirection.x,
@@ -178,12 +208,14 @@ function createVideoBackground() {
                 cameraDirection.z
             ).normalize();
 
-            const shadowBasePos = camera.position.add(fixedCameraDirection.scale(distance));
-            // Apply fixed Y position
+            // Position shadow plane slightly further back than video plane to ensure it's behind model
+            // This prevents shadows from appearing over the model
+            const shadowBasePos = camera.position.add(fixedCameraDirection.scale(distance + 0.5));
+            // Apply fixed Y position for ground-level shadows
             shadowBasePos.y = fixedYPosition;
-
-            // Shadow plane slightly closer to camera so its shadow is visible over the video
-            shadowPlane.position = shadowBasePos.add(fixedCameraDirection.scale(-0.01));
+            
+            // Shadow plane positioned slightly behind video plane
+            shadowPlane.position = shadowBasePos;
 
             // Make shadow plane look in the same direction (but with fixed Y)
             const shadowLookDirection = new BABYLON.Vector3(
@@ -194,6 +226,23 @@ function createVideoBackground() {
             shadowPlane.lookAt(shadowPlane.position.add(shadowLookDirection));
 
             shadowPlane.scaling = new BABYLON.Vector3(1, 1, 1);
+        }
+
+        // Update main light direction to follow camera orientation (keep shadows fixed)
+        if (mainLight && camera) {
+            // Get camera's world matrix which transforms from camera space to world space
+            const worldMatrix = camera.getWorldMatrix();
+            
+            // Transform the original light direction by the camera's world matrix
+            // Vector3.TransformNormal automatically ignores translation, so we can use the full matrix
+            // This keeps the light direction relative to the camera view
+            const transformedDirection = BABYLON.Vector3.TransformNormal(
+                originalLightDirection,
+                worldMatrix
+            );
+            
+            // Update the light direction
+            mainLight.direction = transformedDirection;
         }
     });
 
@@ -230,9 +279,9 @@ function setupLighting() {
 
     // Set up realistic lighting setup similar to model viewer
     // Primary directional light (main sun/key light) - 3-point lighting setup
-    const mainLight = new BABYLON.DirectionalLight(
+    mainLight = new BABYLON.DirectionalLight(
         "mainLight",
-        new BABYLON.Vector3(-2.0, -0.70, 1.80), // Natural sun direction
+        originalLightDirection.clone(), // Natural sun direction (will be updated to follow camera)
         scene
     );
     mainLight.intensity = 1.2; // Moderate intensity for realistic look
@@ -274,6 +323,12 @@ function setupLighting() {
     shadowGenerator.useBlurExponentialShadowMap = true;
     shadowGenerator.blurKernel = 32;
     shadowGenerator.setDarkness(0.15); // Lighter, softer shadows for realistic look
+    
+    // Configure shadow map to cover a large area (for shadows on video background)
+    // This ensures shadows are cast properly on the shadow plane
+    const shadowMapSize = 2048;
+    mainLight.shadowMinZ = 1;
+    mainLight.shadowMaxZ = 200; // Large enough to cover the scene and video background
 
     console.log('Realistic IBL lighting setup complete (model viewer style)');
 }
@@ -382,6 +437,8 @@ function processLoadedModel(meshes, skeletons, animationGroups) {
             // Enable shadows
             console.log('mesh', mesh)
             mesh.receiveShadows = true;
+            // Set model to rendering group 2 so it renders on top of shadow plane (group 1)
+            mesh.renderingGroupId = 2;
             if (shadowGenerator) {
                 shadowGenerator.addShadowCaster(mesh, true);
             }
@@ -414,11 +471,13 @@ function processLoadedModel(meshes, skeletons, animationGroups) {
 
             // Process child meshes
             mesh.getChildMeshes().forEach((child) => {
-                if (child instanceof BABYLON.Mesh) {
-                    child.receiveShadows = true;
-                    if (shadowGenerator) {
-                        shadowGenerator.addShadowCaster(child, true);
-                    }
+                    if (child instanceof BABYLON.Mesh) {
+                        child.receiveShadows = true;
+                        // Set child meshes to rendering group 2 so they render on top of shadow plane
+                        child.renderingGroupId = 2;
+                        if (shadowGenerator) {
+                            shadowGenerator.addShadowCaster(child, true);
+                        }
 
                     // Enhance child materials for realistic IBL
                     if (child.material) {
@@ -487,7 +546,7 @@ function processLoadedModel(meshes, skeletons, animationGroups) {
         console.log('inside###########################6', size);
 
         // Increase scale of the house
-        const scaleFactor = 1.35; // Increase size by 50%
+        const scaleFactor = 1.5; // Increase size by 50%
         rootMesh.scaling = new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor);
         console.log('Model scaled by:', scaleFactor);
         // ADD THIS LINE
@@ -503,6 +562,9 @@ function processLoadedModel(meshes, skeletons, animationGroups) {
 
         // No custom rotation - use default rotation from Blender
         model = rootMesh;
+        
+        // Setup automatic first-time animation when model becomes visible
+        setupAutoPlayOnVisibility();
     }
 }
 
@@ -672,6 +734,57 @@ function moveModelDownAndAnimateReverse() {
 }
 
 
+// Setup automatic first-time animation when model becomes visible on screen
+function setupAutoPlayOnVisibility() {
+    if (hasAutoPlayed) return; // Already played, don't set up again
+    
+    const canvas = document.getElementById('canvas');
+    if (!canvas) return;
+    
+    // Function to trigger the animation
+    const triggerAutoPlay = () => {
+        if (hasAutoPlayed) return; // Already played
+        hasAutoPlayed = true; // Mark as played
+        
+        // Small delay to ensure everything is ready, then play animation
+        setTimeout(() => {
+            if (window.animationGroups && window.animationGroups.length > 0 && !isAnimating) {
+                console.log('Model visible - auto-playing animation for the first time');
+                isAnimating = true;
+                moveModelUpAndAnimate();
+                isAnimationForward = false; // Next time will be reverse
+            }
+        }, 500); // 500ms delay to ensure smooth start
+    };
+    
+    // Check if canvas is already visible (likely on page load)
+    const rect = canvas.getBoundingClientRect();
+    const isVisible = rect.top < window.innerHeight && rect.bottom > 0 && 
+                      rect.left < window.innerWidth && rect.right > 0;
+    
+    if (isVisible) {
+        // Canvas is already visible, trigger immediately
+        triggerAutoPlay();
+    } else {
+        // Use Intersection Observer to detect when canvas becomes visible
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                // If canvas is visible and we haven't auto-played yet
+                if (entry.isIntersecting && !hasAutoPlayed) {
+                    observer.disconnect(); // Stop observing
+                    triggerAutoPlay();
+                }
+            });
+        }, {
+            threshold: 0.1 // Trigger when at least 10% of canvas is visible
+        });
+        
+        // Start observing the canvas
+        observer.observe(canvas);
+        console.log('Auto-play on visibility observer set up');
+    }
+}
+
 // Setup play/pause controls
 function setupControls() {
     const playPauseBtn = document.getElementById('play-pause-btn');
@@ -707,6 +820,56 @@ function setupControls() {
     });
 }
 
+// Setup light direction controls
+function setupLightControls() {
+    const lightXSlider = document.getElementById('light-x');
+    const lightYSlider = document.getElementById('light-y');
+    const lightZSlider = document.getElementById('light-z');
+    const lightXValue = document.getElementById('light-x-value');
+    const lightYValue = document.getElementById('light-y-value');
+    const lightZValue = document.getElementById('light-z-value');
+
+    // Function to update light direction
+    const updateLightDirection = () => {
+        if (!mainLight) return;
+
+        // Get current slider values
+        const x = parseFloat(lightXSlider.value);
+        const y = parseFloat(lightYSlider.value);
+        const z = parseFloat(lightZSlider.value);
+
+        // Update the original light direction
+        originalLightDirection.x = x;
+        originalLightDirection.y = y;
+        originalLightDirection.z = z;
+
+        // Update display values
+        lightXValue.textContent = x.toFixed(2);
+        lightYValue.textContent = y.toFixed(2);
+        lightZValue.textContent = z.toFixed(2);
+
+        // If camera exists, transform the direction by camera's world matrix
+        if (camera) {
+            const worldMatrix = camera.getWorldMatrix();
+            const transformedDirection = BABYLON.Vector3.TransformNormal(
+                originalLightDirection,
+                worldMatrix
+            );
+            mainLight.direction = transformedDirection;
+        } else {
+            // If camera not ready yet, just set the direction directly
+            mainLight.direction = originalLightDirection.clone();
+        }
+    };
+
+    // Add event listeners for all sliders
+    lightXSlider.addEventListener('input', updateLightDirection);
+    lightYSlider.addEventListener('input', updateLightDirection);
+    lightZSlider.addEventListener('input', updateLightDirection);
+
+    console.log('Light direction controls initialized');
+}
+
 // Initialize background video (CSS video)
 // NOTE: now using Babylon video plane instead of HTML/CSS video, so this is no longer needed.
 
@@ -714,3 +877,4 @@ function setupControls() {
 window.addEventListener('load', () => {
     init();
 });
+
