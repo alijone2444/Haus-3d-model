@@ -11,11 +11,13 @@
 <body>
     <div id="container">
         <canvas id="canvas"></canvas>
-        <video id="clouds-video" loop muted autoplay>
-            <source src="clouds.mp4" type="video/mp4">
-        </video>
         <div id="controls">
             <button id="play-pause-btn" class="control-btn">▶ Play</button>
+        </div>
+        <!-- Mesh info popover -->
+        <div id="mesh-popover" class="mesh-popover" style="display: none;">
+            <h4 id="popover-type"></h4>
+            <p id="popover-description"></p>
         </div>
         <!-- Light direction sliders commented out for now -->
         <!--
@@ -44,6 +46,8 @@
     <!-- Babylon.js materials library (needed for ShadowOnlyMaterial) -->
     <script src="https://cdn.babylonjs.com/materialsLibrary/babylon.shadowOnlyMaterial.min.js"></script>
 
+    <!-- Mesh data mapping (must load before app.js) -->
+    <script src="meshDataMap.js"></script>
     <script src="app.js"></script>
 </body>
 
