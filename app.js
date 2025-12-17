@@ -379,7 +379,7 @@ function loadModel() {
     // Use Append to properly load animations - ImportMesh might not load all animations
     BABYLON.SceneLoader.Append(
         "",
-        "model5.glb",
+        "model5.compressed",
         scene,
         () => {
             // Get all meshes from the scene, but EXCLUDE the video background & shadow planes
