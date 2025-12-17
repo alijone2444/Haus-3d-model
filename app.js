@@ -63,6 +63,9 @@ function init() {
     
     // Setup light direction sliders (commented out for now)
     // setupLightControls();
+    
+    // Setup mesh click detection
+    setupMeshClickDetection();
 
     // Handle window resize
     window.addEventListener('resize', () => {
@@ -868,6 +871,153 @@ function setupLightControls() {
     lightZSlider.addEventListener('input', updateLightDirection);
 
     console.log('Light direction controls initialized');
+}
+
+// Setup mesh click detection with raycasting
+function setupMeshClickDetection() {
+    const canvas = document.getElementById('canvas');
+    if (!canvas) return;
+    
+    // Mesh data mapping is loaded from meshDataMap.js
+    // The meshDataMap variable is available globally
+    
+    // Function to get mesh data based on name
+    const getMeshData = (meshName) => {
+        // Check exact match first
+        if (meshDataMap[meshName]) {
+            return meshDataMap[meshName];
+        }
+        
+        // Check for partial matches (case-insensitive)
+        const lowerMeshName = meshName.toLowerCase();
+        for (const [key, value] of Object.entries(meshDataMap)) {
+            if (lowerMeshName.includes(key.toLowerCase())) {
+                return value;
+            }
+        }
+        
+        // Return generic data if no match found
+        return {
+            type: 'Unknown',
+            description: 'No specific data available for this mesh',
+            features: []
+        };
+    };
+    
+    // Get popover element
+    const popover = document.getElementById('mesh-popover');
+    const popoverType = document.getElementById('popover-type');
+    const popoverDescription = document.getElementById('popover-description');
+    
+    if (!popover || !popoverType || !popoverDescription) {
+        console.warn('Popover elements not found');
+        return;
+    }
+    
+    // Add hover event listener to show popover
+    canvas.addEventListener('pointermove', (event) => {
+        if (!scene || !camera) return;
+        
+        // Get the picking ray from the camera
+        const pickResult = scene.pick(scene.pointerX, scene.pointerY);
+        
+        // Check if we hit a mesh
+        if (pickResult.hit && pickResult.pickedMesh) {
+            const mesh = pickResult.pickedMesh;
+            
+            // Exclude video background and shadow planes
+            if (mesh.name === 'videoBackgroundPlane' || mesh.name === 'videoShadowPlane') {
+                popover.style.display = 'none';
+                return;
+            }
+            
+            // Get mesh data
+            const meshData = getMeshData(mesh.name);
+            
+            // Only show popover for known meshes (not "Unknown")
+            if (meshData.type !== 'Unknown') {
+                // Update popover content
+                popoverType.textContent = meshData.type;
+                popoverDescription.textContent = meshData.description;
+                
+                // Position popover near cursor
+                const offsetX = 15; // Offset from cursor
+                const offsetY = 15;
+                popover.style.left = (event.clientX + offsetX) + 'px';
+                popover.style.top = (event.clientY + offsetY) + 'px';
+                popover.style.display = 'block';
+            } else {
+                popover.style.display = 'none';
+            }
+        } else {
+            // No mesh hit, hide popover
+            popover.style.display = 'none';
+        }
+    });
+    
+    // Hide popover when mouse leaves canvas
+    canvas.addEventListener('pointerleave', () => {
+        popover.style.display = 'none';
+    });
+    
+    // Add click event listener
+    canvas.addEventListener('click', (event) => {
+        if (!scene || !camera) return;
+        
+        // Get the picking ray from the camera
+        const pickResult = scene.pick(scene.pointerX, scene.pointerY);
+        
+        // Check if we hit a mesh
+        if (pickResult.hit && pickResult.pickedMesh) {
+            const mesh = pickResult.pickedMesh;
+            
+            // Exclude video background and shadow planes
+            if (mesh.name === 'videoBackgroundPlane' || mesh.name === 'videoShadowPlane') {
+                return;
+            }
+            
+            // Get mesh data
+            const meshData = getMeshData(mesh.name);
+            
+            // Console log the mesh information
+            console.log('='.repeat(50));
+            console.log('MESH CLICKED:');
+            console.log('='.repeat(50));
+            console.log('Mesh Name:', mesh.name);
+            console.log('Mesh Type:', meshData.type);
+            console.log('Description:', meshData.description);
+            console.log('Features:', meshData.features);
+            console.log('Position:', {
+                x: mesh.position.x.toFixed(2),
+                y: mesh.position.y.toFixed(2),
+                z: mesh.position.z.toFixed(2)
+            });
+            console.log('Material:', mesh.material ? mesh.material.name : 'No material');
+            console.log('='.repeat(50));
+            
+            // Optional: Visual feedback - briefly highlight only the clicked mesh
+            // Clone the material to avoid affecting other meshes sharing the same material
+            if (mesh.material && mesh.material.emissiveColor) {
+                // Store the original material
+                const originalMaterial = mesh.material;
+                
+                // Clone the material for this mesh only
+                const highlightMaterial = originalMaterial.clone(originalMaterial.name + '_highlight');
+                highlightMaterial.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+                
+                // Apply the highlight material temporarily
+                mesh.material = highlightMaterial;
+                
+                // Restore original material after 200ms
+                setTimeout(() => {
+                    mesh.material = originalMaterial;
+                    highlightMaterial.dispose(); // Clean up cloned material
+                }, 200);
+            }
+        }
+    });
+    
+    console.log('Mesh click detection enabled');
 }
 
 // Initialize background video (CSS video)
