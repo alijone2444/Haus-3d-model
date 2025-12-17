@@ -13,7 +13,8 @@ const meshDataMap = {
             'Natural daylight',
             'Garden-facing views',
             'Additional living or seating area'
-        ]
+        ],
+        link: 'https://example.com/conservatory' // Replace with your actual URL
     },
     'Door.003_primitive0': {
         type: 'Conservatory Door',
@@ -22,7 +23,8 @@ const meshDataMap = {
             'Interior-exterior transition',
             'Glass panel design',
             'Easy access to conservatory'
-        ]
+        ],
+        link: 'https://example.com/conservatory-door' // Replace with your actual URL
     },
     'Cube.007': {
         type: 'Conservatory',
@@ -45,7 +47,19 @@ const meshDataMap = {
             'Security locking system',
             'Weather protection',
             'Durable construction'
-        ]
+        ],
+        link: 'https://example.com/front-door' // Replace with your actual URL
+    },
+    'Door.002_primitive0': {
+        type: 'Front Entrance Door',
+        description: 'Primary entrance door located at the front of the house.',
+        features: [
+            'Main entry point',
+            'Security locking system',
+            'Weather protection',
+            'Durable construction'
+        ],
+        link: 'https://example.com/front-door' // Replace with your actual URL
     },
     'Stairs.001': {
         type: 'Entrance Steps',
@@ -76,7 +90,8 @@ const meshDataMap = {
             'Natural light',
             'Ventilation',
             'Enhanced visibility'
-        ]
+        ],
+        link: 'https://example.com/multi-panel-window' // Replace with your actual URL
     },
     'Window.005': {
         type: 'Single Window',
@@ -85,7 +100,8 @@ const meshDataMap = {
             'Natural light',
             'Single pane',
             'Ventilation'
-        ]
+        ],
+        link: 'https://example.com/single-window' // Replace with your actual URL
     },
     'Window.006': {
         type: 'Window Glass',
@@ -94,7 +110,8 @@ const meshDataMap = {
             'Transparent glass',
             'Natural light',
             'Weather protection'
-        ]
+        ],
+        link: 'https://example.com/window-glass' // Replace with your actual URL
     },
     'Window': {
         type: 'Front Window (Ground Floor – Left)',
