@@ -176,3 +176,32 @@ body {
     font-weight: bold;
     font-size: 14px;
 }
+
+/* Mesh info popover */
+.mesh-popover {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    pointer-events: none; /* Don't block mouse events */
+    max-width: 250px;
+    font-family: Arial, sans-serif;
+    transition: opacity 0.2s ease;
+}
+
+.mesh-popover h4 {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    color: #4CAF50;
+    font-weight: bold;
+}
+
+.mesh-popover p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #e0e0e0;
+}
