@@ -993,7 +993,16 @@ function setupMeshClickDetection() {
                 z: mesh.position.z.toFixed(2)
             });
             console.log('Material:', mesh.material ? mesh.material.name : 'No material');
+            if (meshData.link) {
+                console.log('Link:', meshData.link);
+            }
             console.log('='.repeat(50));
+            
+            // Open link in new tab if available
+            if (meshData.link) {
+                console.log('Opening in new tab:', meshData.link);
+                window.open(meshData.link, '_blank');
+            }
             
             // Optional: Visual feedback - briefly highlight only the clicked mesh
             // Clone the material to avoid affecting other meshes sharing the same material
