@@ -78,7 +78,7 @@ body {
 /* Move play button up on mobile screens */
 @media screen and (max-width: 768px) {
     #controls {
-        bottom: 80px; /* Move up to 80px from bottom on mobile */
+        bottom: 50px; /* Move up to 80px from bottom on mobile */
     }
 }
 
