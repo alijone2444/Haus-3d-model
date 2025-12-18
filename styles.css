@@ -75,10 +75,10 @@ body {
     gap: 10px;
 }
 
-/* Move play button down on mobile screens */
+/* Move play button up on mobile screens */
 @media screen and (max-width: 768px) {
     #controls {
-        bottom: 30px; /* Move down closer to bottom on mobile */
+        bottom: 80px; /* Move up to 80px from bottom on mobile */
     }
 }
 
