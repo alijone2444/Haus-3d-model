@@ -114,15 +114,35 @@ function createVideoBackground() {
     camera.upperRadiusLimit = distance;
 
     // Calculate plane dimensions to exactly fill camera view
+    // For mobile, maintain aspect ratio to prevent squeezing
     const height = 2 * Math.tan(fovRad / 2) * distance; // based on FOV
     const aspectRatio = engine.getAspectRatio(camera);
-    const width = height * aspectRatio; // based on aspect ratio
+    let width = height * aspectRatio; // based on aspect ratio
+    
+    // On mobile (portrait), adjust to prevent video squeezing
+    const isMobile = window.innerWidth < 768;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    if (isMobile && isPortrait) {
+        // Maintain video aspect ratio on mobile portrait
+        const videoAspectRatio = 16 / 9; // Assuming video is 16:9, adjust if different
+        width = height * videoAspectRatio;
+    }
+
+    // Store original dimensions on plane for dynamic scaling
+    const originalPlaneWidth = width;
+    const originalPlaneHeight = height;
 
     // Create a fullscreen plane for the video background
     const videoPlane = BABYLON.MeshBuilder.CreatePlane("videoBackgroundPlane", {
-        width: width,
-        height: height
+        width: originalPlaneWidth,
+        height: originalPlaneHeight
     }, scene);
+    
+    // Store original dimensions on plane for access in render loop
+    videoPlane.metadata = {
+        originalWidth: originalPlaneWidth,
+        originalHeight: originalPlaneHeight
+    };
 
     // Explicitly set scale
     videoPlane.scaling = new BABYLON.Vector3(1, 1, 1);
@@ -195,13 +215,32 @@ function createVideoBackground() {
         if (videoPlane && shadowPlane && camera) {
             const cameraDirection = camera.getForwardRay().direction;
 
+            // Recalculate dimensions dynamically for mobile responsiveness
+            const fovRad = camera.fov;
+            const height = 2 * Math.tan(fovRad / 2) * distance;
+            const aspectRatio = engine.getAspectRatio(camera);
+            const isMobile = window.innerWidth < 768;
+            const isPortrait = window.innerHeight > window.innerWidth;
+            let width = height * aspectRatio;
+            if (isMobile && isPortrait) {
+                // Maintain video aspect ratio on mobile portrait to prevent squeezing
+                const videoAspectRatio = 16 / 9; // Adjust if your video has different aspect ratio
+                width = height * videoAspectRatio;
+            }
+            
+            // Scale plane to match calculated dimensions using stored original dimensions
+            const originalWidth = videoPlane.metadata ? videoPlane.metadata.originalWidth : width;
+            const originalHeight = videoPlane.metadata ? videoPlane.metadata.originalHeight : height;
+            const scaleX = width / originalWidth;
+            const scaleY = height / originalHeight;
+
             // For video plane: follow camera normally
             const basePos = camera.position.add(cameraDirection.scale(distance));
 
             // Background video plane position
             videoPlane.position = basePos;
             videoPlane.lookAt(videoPlane.position.add(cameraDirection));
-            videoPlane.scaling = new BABYLON.Vector3(1, 1, 1);
+            videoPlane.scaling = new BABYLON.Vector3(scaleX, scaleY, 1);
 
             // For shadow plane: position at same location as video plane but with fixed Y
             // Create a modified camera direction with Y fixed
@@ -228,7 +267,8 @@ function createVideoBackground() {
             ).normalize();
             shadowPlane.lookAt(shadowPlane.position.add(shadowLookDirection));
 
-            shadowPlane.scaling = new BABYLON.Vector3(1, 1, 1);
+            // Match shadow plane scaling to video plane
+            shadowPlane.scaling = new BABYLON.Vector3(scaleX, scaleY, 1);
         }
 
         // Update main light direction to follow camera orientation (keep shadows fixed)
@@ -548,10 +588,11 @@ function processLoadedModel(meshes, skeletons, animationGroups) {
         const size = max.subtract(min);
         console.log('inside###########################6', size);
 
-        // Increase scale of the house
-        const scaleFactor = 1.5; // Increase size by 50%
+        // Increase scale of the house - smaller on mobile to fit entire model on screen
+        const isMobile = window.innerWidth < 768;
+        const scaleFactor = isMobile ? 1.0 : 1.5; // 1.0 on mobile, 1.5 on desktop
         rootMesh.scaling = new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor);
-        console.log('Model scaled by:', scaleFactor);
+        console.log('Model scaled by:', scaleFactor, isMobile ? '(mobile)' : '(desktop)');
         // ADD THIS LINE
 
         // Position the model below ground surface
@@ -577,7 +618,11 @@ function moveModelUpAndAnimate() {
     if (model) {
         // Store current scale for reference
         const currentScale = model.scaling.x;
-        const targetScale = 1.0; // Scale to 1 as requested
+        
+        // Scale down during animation - use mobile-responsive scale factor
+        const isMobile = window.innerWidth < 768;
+        // Desktop: scale from 1.5 to 1.0, Mobile: scale from 1.0 to 0.8 (further down for better fit)
+        const targetScale = isMobile ? 0.5 : 1.0;
 
         const startY = model.position.y;
         const targetY = -1;
@@ -638,6 +683,12 @@ function moveModelUpAndAnimate() {
         }
     }
 
+    // Re-enable camera controls when forward animation starts
+    if (camera && canvas) {
+        camera.attachControl(canvas, true);
+        console.log('Camera controls unlocked');
+    }
+    
     // Start animation groups forward
     if (window.animationGroups && window.animationGroups.length > 0) {
         window.animationGroups.forEach((animGroup) => {
@@ -649,6 +700,13 @@ function moveModelUpAndAnimate() {
             // Listen for animation end
             animGroup.onAnimationEndObservable.addOnce(() => {
                 isAnimating = false;
+                
+                // Lock camera controls when animation finishes
+                if (camera && canvas) {
+                    camera.detachControl(canvas);
+                    console.log('Camera controls locked - click Play to unlock');
+                }
+                
                 const playPauseBtn = document.getElementById('play-pause-btn');
                 if (playPauseBtn) {
                     playPauseBtn.disabled = false;
@@ -660,6 +718,12 @@ function moveModelUpAndAnimate() {
 }
 // Function to move model down and play animation in reverse
 function moveModelDownAndAnimateReverse() {
+    // Re-enable camera controls when reverse animation starts
+    if (camera && canvas) {
+        camera.attachControl(canvas, true);
+        console.log('Camera controls unlocked');
+    }
+    
     if (model && originalYPosition !== null) {
         const startY = model.position.y;
         const targetY = originalYPosition;
@@ -726,6 +790,10 @@ function moveModelDownAndAnimateReverse() {
 
             animGroup.onAnimationEndObservable.addOnce(() => {
                 isAnimating = false;
+                
+                // Keep camera controls unlocked after reverse animation
+                // User can freely move camera after reverse animation completes
+                
                 const playPauseBtn = document.getElementById('play-pause-btn');
                 if (playPauseBtn) {
                     playPauseBtn.disabled = false;
@@ -749,7 +817,7 @@ function setupAutoPlayOnVisibility() {
         if (hasAutoPlayed) return; // Already played
         hasAutoPlayed = true; // Mark as played
         
-        // Small delay to ensure everything is ready, then play animation
+        // Delay of 2.5-3 seconds after visibility before starting animation
         setTimeout(() => {
             if (window.animationGroups && window.animationGroups.length > 0 && !isAnimating) {
                 console.log('Model visible - auto-playing animation for the first time');
@@ -757,7 +825,7 @@ function setupAutoPlayOnVisibility() {
                 moveModelUpAndAnimate();
                 isAnimationForward = false; // Next time will be reverse
             }
-        }, 500); // 500ms delay to ensure smooth start
+        }, 2500); // 2.5 second delay after visibility
     };
     
     // Check if canvas is already visible (likely on page load)
