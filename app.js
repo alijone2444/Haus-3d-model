@@ -595,8 +595,9 @@ function processLoadedModel(meshes, skeletons, animationGroups) {
         console.log('Model scaled by:', scaleFactor, isMobile ? '(mobile)' : '(desktop)');
         // ADD THIS LINE
 
-        // Position the model below ground surface
-        rootMesh.position.y = -center.y - 1.5; // Move down by 1.0 units
+        // Position the model below ground surface (moved up slightly on mobile only)
+        const initialYOffset = isMobile ? -1.2 : -1.5; // Moved up on mobile to accommodate button at 80px
+        rootMesh.position.y = -center.y + initialYOffset;
         rootMesh.position.x = -center.x - 0; // Move closer to camera/screen (more negative = closer)
 
         console.log('Model positioned at Y:', rootMesh.position.y, rootMesh.position.x);
@@ -625,7 +626,7 @@ function moveModelUpAndAnimate() {
         const targetScale = isMobile ? 0.5 : 1.0;
 
         const startY = model.position.y;
-        const targetY = -1;
+        const targetY = -0.5; // Moved up slightly to accommodate button at 80px
         const duration = 2000; // 2 seconds for smooth movement
         const fps = 30;
         const endFrame = duration / 1000 * fps;
