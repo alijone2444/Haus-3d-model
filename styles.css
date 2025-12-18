@@ -75,6 +75,13 @@ body {
     gap: 10px;
 }
 
+/* Move play button down on mobile screens */
+@media screen and (max-width: 768px) {
+    #controls {
+        bottom: 30px; /* Move down closer to bottom on mobile */
+    }
+}
+
 .control-btn {
     padding: 12px 24px;
     font-size: 16px;
